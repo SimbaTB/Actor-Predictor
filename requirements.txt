@@ -1,0 +1,19 @@
+ale-py==0.11.1
+swig==4.3.1
+gymnasium[classic-control,box2d,mujoco]==1.2.0
+crafter==1.8.3
+minigrid==3.0.0
+dm_control==1.0.36
+numpy==2.3.1
+pandas==3.0.0
+matplotlib==3.10.8
+opencv-python==4.13.0.92
+torch==2.8.0
+torchvision==0.23.0
+tensorboard==2.19.0
+einops==0.8.1
+moviepy==1.0.3
+requests==2.32.4        # needed by moviepy
+imageio==2.37.0         # needed by moviepy
+stable-baselines3==2.7.1
+sb3_contrib==2.7.1
