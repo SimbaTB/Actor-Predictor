@@ -64,7 +64,7 @@ tools.set_random_seed(args.seed)
 device = "cuda" if torch.cuda.is_available() else "cpu"
 print("using device:", device)
 
-logdir = args.logdir or f"./runs/{args.task.replace('ALE/', '')}_{str(time.time())[-5:]}"
+logdir = args.logdir or f"./runs/{args.task.replace('ALE/', '')}_{args.algorithm}_{str(time.time())[-5:]}"
 print("logdir:", logdir)
 
 train_env = Monitor(envs.make_env(args.task, seed=args.seed))

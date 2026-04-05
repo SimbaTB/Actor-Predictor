@@ -72,17 +72,6 @@ class Grid(gym.Env):
     def close(self):
         pass
 
-gym.register_envs(ale_py)
-gym.register(id="Grid", entry_point="envs:Grid")
-
-DMC_tasks = [("ball_in_cup", "catch"), ("cartpole", "balance"), ("cheetah", "run"), ("finger", "spin")]
-for domain, task in DMC_tasks:
-    gym.register(
-        id=f"DMC-{domain}-{task}",
-        entry_point="envs:DMCSuiteEnv",
-        kwargs=dict(domain_name=domain, task_name=task, from_pixels=True, height=64, width=64)
-    )
-
 class DMCSuiteEnv(gym.Env):
     def __init__(self, domain_name, task_name, from_pixels=True, height=84, width=84, frame_skip=1, *args, **kwargs):
         self._env = suite.load(domain_name, task_name)
@@ -136,6 +125,94 @@ class DMCSuiteEnv(gym.Env):
     def close(self):
         pass
 
+from gymnasium.envs.classic_control.cartpole import CartPoleEnv
+
+class CartPoleContinuousEnv(CartPoleEnv):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.action_space = spaces.Box(low=-1.0, high=1.0, shape=(1,), )
+
+    def step(self, action):
+        assert self.action_space.contains(action), f"{action!r} ({type(action)}) invalid"
+        assert self.state is not None, "Call reset before using step method."
+        x, x_dot, theta, theta_dot = self.state
+        # force = self.force_mag if action == 1 else -self.force_mag
+        force = self.force_mag * action[0]
+        costheta = np.cos(theta)
+        sintheta = np.sin(theta)
+
+        # For the interested reader:
+        # https://coneural.org/florian/papers/05_cart_pole.pdf
+        temp = (
+            force + self.polemass_length * np.square(theta_dot) * sintheta
+        ) / self.total_mass
+        thetaacc = (self.gravity * sintheta - costheta * temp) / (
+            self.length
+            * (4.0 / 3.0 - self.masspole * np.square(costheta) / self.total_mass)
+        )
+        xacc = temp - self.polemass_length * thetaacc * costheta / self.total_mass
+
+        if self.kinematics_integrator == "euler":
+            x = x + self.tau * x_dot
+            x_dot = x_dot + self.tau * xacc
+            theta = theta + self.tau * theta_dot
+            theta_dot = theta_dot + self.tau * thetaacc
+        else:  # semi-implicit euler
+            x_dot = x_dot + self.tau * xacc
+            x = x + self.tau * x_dot
+            theta_dot = theta_dot + self.tau * thetaacc
+            theta = theta + self.tau * theta_dot
+
+        self.state = np.array((x, x_dot, theta, theta_dot), dtype=np.float64)
+
+        terminated = bool(
+            x < -self.x_threshold
+            or x > self.x_threshold
+            or theta < -self.theta_threshold_radians
+            or theta > self.theta_threshold_radians
+        )
+
+        if not terminated:
+            reward = 0.0 if self._sutton_barto_reward else 1.0
+        elif self.steps_beyond_terminated is None:
+            # Pole just fell!
+            self.steps_beyond_terminated = 0
+
+            reward = -1.0 if self._sutton_barto_reward else 1.0
+        else:
+            if self.steps_beyond_terminated == 0:
+                logger.warn(
+                    "You are calling 'step()' even though this environment has already returned terminated = True. "
+                    "You should always call 'reset()' once you receive 'terminated = True' -- any further steps are undefined behavior."
+                )
+            self.steps_beyond_terminated += 1
+
+            reward = -1.0 if self._sutton_barto_reward else 0.0
+
+        if self.render_mode == "human":
+            self.render()
+
+        # truncation=False as the time limit is handled by the `TimeLimit` wrapper added during `make`
+        return np.array(self.state, dtype=np.float32), reward, terminated, False, {}
+
+
+gym.register_envs(ale_py)
+gym.register(id="Grid", entry_point="envs:Grid")
+gym.register(
+    id='CartPoleContinuous-v1', 
+    entry_point='envs:CartPoleContinuousEnv',
+    max_episode_steps=500,
+    reward_threshold=475.0,
+)
+
+DMC_tasks = [("ball_in_cup", "catch"), ("cartpole", "balance"), ("cheetah", "run"), ("finger", "spin")]
+for domain, task in DMC_tasks:
+    gym.register(
+        id=f"DMC-{domain}-{task}",
+        entry_point="envs:DMCSuiteEnv",
+        kwargs=dict(domain_name=domain, task_name=task, from_pixels=True, height=64, width=64)
+    )
+
 class OneHotWrapper(gym.ObservationWrapper):
     def __init__(self, env):
         super().__init__(env)
@@ -186,6 +263,16 @@ class GaussianNoiseWrapper(gym.ObservationWrapper):
         noisy_obs = np.clip(noisy_obs, self.observation_space.low, self.observation_space.high)
         return noisy_obs
 
+class PartialObservationWrapper(gym.ObservationWrapper):
+    def __init__(self, env, mask):
+        assert isinstance(env.observation_space, gym.spaces.Box)
+        super().__init__(env)
+        self.mask = np.array(mask, dtype=np.bool)
+        assert self.mask.shape == env.observation_space.shape
+        
+    def observation(self, observation):
+        return self.mask * observation
+    
 # 将动作空间线性映射到[-1, 1]
 class NormalizeActionWrapper(gym.ActionWrapper):
     def __init__(self, env):
@@ -208,13 +295,27 @@ class NormalizeActionWrapper(gym.ActionWrapper):
 
     
 def make_env(id:str, seed=None):
-    if id == "FrozenLake-v1":
-        env = gym.make('FrozenLake-v1', render_mode="rgb_array", desc=None, map_name="4x4", is_slippery=False)
-        env = OneHotWrapper(env)
-        return env
-    
-    env = gym.make(id, render_mode="rgb_array")
+    # options
+    if "-N" in id:
+        noise = True
+        id = id.replace("-N", "")
+    else:
+        noise = False
 
+    # create the environment
+    if id == "Pendulum-v1-P":
+        env = gym.make("Pendulum-v1", render_mode="rgb_array")
+        env = PartialObservationWrapper(env, [1, 1, 0])
+    elif id == "MountainCarContinuous-v0-P":
+        env = gym.make("MountainCarContinuous-v0", render_mode="rgb_array")
+        env = PartialObservationWrapper(env, [1, 0])
+    elif id == "CartPoleContinuous-v1-P":
+        env = gym.make("CartPoleContinuous-v1", render_mode="rgb_array")
+        env = PartialObservationWrapper(env, [1, 0, 1, 0])
+    else:
+        env = gym.make(id, render_mode="rgb_array")
+
+    # wrap the environment
     if "MiniGrid" in id:
         env = RGBImgPartialObsWrapper(env)
         env = ImgObsWrapper(env)
@@ -222,10 +323,12 @@ def make_env(id:str, seed=None):
     if tools.is_image(env.observation_space):
         env = ImageWrapper(env)
     else:
-        env = GaussianNoiseWrapper(env)
+        if noise:
+            env = GaussianNoiseWrapper(env)
 
     env = NormalizeActionWrapper(env)
 
+    # set the random seed
     if seed is not None:
         env.reset(seed=seed)
         env.action_space.seed(seed=seed)

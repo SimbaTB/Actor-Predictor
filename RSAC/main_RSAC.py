@@ -4,13 +4,15 @@ import torch
 from torch.utils.tensorboard import SummaryWriter
 import numpy as np
 import cv2
-import agent
-import replay
-import tools
-import envs
 import argparse
 import time
 import multiprocessing
+import agent_RSAC
+import sys
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+import replay
+import tools
+import envs
 
 lr = 3e-4
 alpha = 1
@@ -24,9 +26,12 @@ seq_len = 16
 batch_size = 64
 loss_scales = {"obs":1.0, "rew":1.0, "con":1.0, "actor":1.0, "critic":1.0, "alpha":0.1}
 
-def train_policy(logdir, step, episode, train_env, eval_env, train_agent, eval_agent, replay_buffer, 
+def train_policy(logdir, step, train_env, eval_env, train_agent, eval_agent, replay_buffer, 
                  total_steps, batch_size=batch_size, 
                  learning_starts=learning_starts, update_every=1, report_every=4000, save=False, use_async_eval=False):
+    step = 0
+    episode = 0
+    
     last_step, last_time = 0, time.time()
     report_process = None
 
@@ -54,7 +59,7 @@ def train_policy(logdir, step, episode, train_env, eval_env, train_agent, eval_a
             
             if step % report_every == 0 or step == total_steps:
                 if save:
-                    save_checkpoint(logdir, train_agent, replay_buffer, step, episode)
+                    save_checkpoint(logdir, train_agent, replay_buffer, step)
                 
                 fps = (step - last_step) / (time.time() - last_time)
                 last_step, last_time = step, time.time()
@@ -95,10 +100,6 @@ def report(logdir, metrics, eval_env, eval_agent, batch, step, episode, fps):
     writer.add_video("eval_video", video, global_step=step, fps=16)
     metrics["fps"] = fps
 
-    if tools.is_image(eval_env.observation_space):
-        video = eval_agent.video_pred(**batch)
-        writer.add_video("pred_video", video, step, fps=16)
-
     for name, value in metrics.items():
         writer.add_scalar(name, value, step)
     
@@ -110,7 +111,6 @@ def report(logdir, metrics, eval_env, eval_agent, batch, step, episode, fps):
         file.write(log)
     
     writer.close()
-    save_best(logdir, eval_agent, eval_return.mean().item())
 
 def evaluate_policy(env, agent, num_episodes = 5):
     returns = np.zeros((num_episodes,), dtype=np.float32)
@@ -147,10 +147,9 @@ def evaluate_policy(env, agent, num_episodes = 5):
     video = torch.from_numpy(video).unsqueeze(0).permute(0, 1, 4, 2, 3).float() / 255.0
     return returns, total_steps/num_episodes, video
 
-def save_checkpoint(logdir, agent, replay_buffer, step, episode):
+def save_checkpoint(logdir, agent, replay_buffer, step):
     checkpoint = {
         "step": step,
-        "episode": episode,
         "agent": agent.state_dict(),
         "agent.optim": agent.optim.state_dict(),
         "agent.scaler": agent.scaler.state_dict(),
@@ -164,31 +163,17 @@ def load_checkpoint(logdir, agent, replay_buffer, device=None):
     try:
         checkpoint = torch.load(path, map_location=device)
         step = checkpoint["step"]
-        episode = checkpoint["episode"]
         agent.load_state_dict(checkpoint["agent"])
         agent.optim.load_state_dict(checkpoint["agent.optim"])
         agent.scaler.load_state_dict(checkpoint["agent.scaler"])
         replay_buffer.load_state_dict(checkpoint["replay_buffer"])
     except:
         print(f"Unable to load checkpoint from {path}.")
-        step, episode = 0, 0
+        step = 0
     else:
         print(f"Successfully load checkpoint from {path}.")
 
-    return step, episode
-
-def save_best(logdir, agent, eval_return):
-    path = logdir + "/best_eval_return.txt"
-    if os.path.exists(path):
-        with open(path, "r") as file:
-            best_return = eval(file.read())
-    else:
-        best_return = float("-inf")
-    
-    if eval_return > best_return:
-        with open(path, "w") as file:
-            file.write(str(eval_return))
-        torch.save(agent.state_dict(), logdir + "/best_agent.pt")
+    return step
 
 if __name__ == "__main__":
     multiprocessing.set_start_method('fork')
@@ -210,7 +195,7 @@ if __name__ == "__main__":
     device = "cuda" if torch.cuda.is_available() else "cpu"
     print("using device:", device)
 
-    logdir = args.logdir or f"./runs/{args.task.replace('ALE/', '')}_Actor-Predictor_{str(time.time())[-5:]}"
+    logdir = args.logdir or f"../runs/{args.task.replace('ALE/', '')}_RSAC_{str(time.time())[-5:]}"
     os.makedirs(logdir, exist_ok=True)
     print("logdir:", logdir)
 
@@ -226,24 +211,23 @@ if __name__ == "__main__":
     replay_buffer = replay.ReplayBuffer(buffer_size, obs_space, act_space, seq_len, device, device)
     # 创建两个agent对象，一个用于训练，一个用于测试
     # 一方面，测试和训练可以同步进行；另一方面，测试和训练的batch_size不同，torch.compile可以分别优化
-    train_agent = agent.Agent(obs_space, hidden_dim, act_space, lr, grad_clip, alpha, tau, gamma, loss_scales, device)
-    eval_agent = agent.Agent(obs_space, hidden_dim, act_space, lr, grad_clip, alpha, tau, gamma, loss_scales, "cpu" if args.async_eval else device)
+    train_agent = agent_RSAC.Agent(obs_space, hidden_dim, act_space, lr, grad_clip, alpha, tau, gamma, loss_scales, device)
+    eval_agent = agent_RSAC.Agent(obs_space, hidden_dim, act_space, lr, grad_clip, alpha, tau, gamma, loss_scales, "cpu" if args.async_eval else device)
     train_agent = torch.compile(train_agent)
     eval_agent = torch.compile(eval_agent)
-    step, episode = load_checkpoint(logdir, train_agent, replay_buffer, device)
+    step = load_checkpoint(logdir, train_agent, replay_buffer, device)
 
     # ========== print total params ========== 
     print("==========total params:{:,}==========".format(tools.get_params_num(train_agent)))
     if hasattr(train_agent, "encoder"):
         print("encoder: {:,}".format(tools.get_params_num(train_agent.encoder)))
     print("predictor: {:,}".format(tools.get_params_num(train_agent.predictor)))
-    print("decoder: {:,}".format(tools.get_params_num(train_agent.decoder)))
     print("actor: {:,}".format(tools.get_params_num(train_agent.actor)))
     print("critic: {:,}".format(tools.get_params_num(train_agent.critic)))
     print("=====================================")
     
     print("begin to train.")
-    train_policy(logdir, step, episode, train_env, eval_env, train_agent, eval_agent, replay_buffer, 
+    train_policy(logdir, step, train_env, eval_env, train_agent, eval_agent, replay_buffer, 
               total_steps=args.steps, save=args.save, use_async_eval=args.async_eval)
 
     train_env.close()
