@@ -119,3 +119,12 @@ For example, you can plot learning curves with the following command. The learni
 ```
 python evaluate.py plot --logdir ./runs 
 ```
+
+## Third-Party Code
+
+`VRM/` directory contains code adapted from:
+- Repository: [oist-cnru/Variational-Recurrent-Models](https://github.com/oist-cnru/Variational-Recurrent-Models)
+- License: [LICENSE-VRM](variational_recurrent_models/LICENSE) (included in directory)
+- Modifications: 
+    - Added CUDA support and automatic device detection
+    - Modified command-line interface and argument parsing
