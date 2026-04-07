@@ -121,9 +121,9 @@ python evaluate.py plot --logdir ./runs
 ```
 
 ## Results
-![](./Visualization/baselines-no-noise.png)
-![](./Visualization/baselines-with-noise.png)
-![](./Visualization/classic-control.png)
+![](Visualization/baselines-no-noise.png)
+![](Visualization/baselines-with-noise.png)
+![](Visualization/classic-control.png)
 
 ## Third-Party Code
 
