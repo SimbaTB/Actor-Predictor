@@ -120,6 +120,11 @@ For example, you can plot learning curves with the following command. The learni
 python evaluate.py plot --logdir ./runs 
 ```
 
+## Results
+![](./Visualization/baselines-no-noise.png)
+![](./Visualization/baselines-with-noise.png)
+![](./Visualization/classic-control.png)
+
 ## Third-Party Code
 
 `VRM/` directory contains code adapted from:
