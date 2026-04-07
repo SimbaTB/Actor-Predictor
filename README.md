@@ -121,12 +121,12 @@ python evaluate.py plot --logdir ./runs
 ```
 
 ## Results
-![Learning curves on vector-based observation tasks (without observation noise)](https://github.com/SimbaTB/Actor-Predictor/blob/main/Visualization/baselines-no-noise.png)
+![Learning curves on vector-based observation tasks (without observation noise)](https://github.com/SimbaTB/Actor-Predictor/blob/main/Visualization/baselines-no-noise.png?raw=true)
 
-![Learning curves on vector-based observation tasks (with observation noise). -N denotes observation noise.](https://github.com/SimbaTB/Actor-Predictor/blob/main/Visualization/baselines-with-noise.png)
+![Learning curves on vector-based observation tasks (with observation noise). -N denotes observation noise.](https://github.com/SimbaTB/Actor-Predictor/blob/main/Visualization/baselines-with-noise.png?raw=true)
 
 ![Learning curves on two classic continuous control tasks. -P denotes partial observability, and -N denotes observation
-noise.](https://github.com/SimbaTB/Actor-Predictor/blob/main/Visualization/classic-control.png)
+noise.](https://github.com/SimbaTB/Actor-Predictor/blob/main/Visualization/classic-control.png?raw=true)
 
 ## Third-Party Code
 
