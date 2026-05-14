@@ -1,6 +1,19 @@
 # Actor-Predictor
 
-Implementation of `Improving Policy Learning and Robustness in Partially Observable Reinforcement Learning through World Model`, which combines LSTM-based world model with Soft Actor-Critic (SAC) by using the prediction of world model and the real observation from environment jointly as the input of value network and policy network, achieving outstanding performance and robustness.
+Implementation of `An End-to-End World Model Augmented Framework for Robust Reinforcement Learning under Partial Observability`. 
+
+Key features:​
+- leverages an end-to-end world model to predict the state
+- combines the prediction of the world model and the real observation together as the input of value and policy networks
+- direct symlog transformation on rewards prior to TD value computation
+- maintain robustness as well as tackle partial observability
+
+Results on BipedalWalkerHardcore-v3 after 1000,000 timesteps:
+| No observation noise | Add observation noise $\varepsilon \sim \mathcal{N}(0, 0.1)$ |
+| --- | --- |
+| ![BWHardcore-no-noise.gif](Visualization/BWHardcore-no-noise.gif?raw=true) | ![BWHardcore-with-noise.gif](Visualization/BWHardcore-with-noise.gif?raw=true) |
+
+> Note: SAC, PPO, and TD3 failed to solve BipedalWalkerHardcore-v3 in 1000,000 timesteps in our settings, even without observation noise
 
 ## Install Dependencies
 This code has been tested on Python 3.12. Run following commands to install dependencies.

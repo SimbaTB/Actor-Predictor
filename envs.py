@@ -74,6 +74,8 @@ class Grid(gym.Env):
 
 class DMCSuiteEnv(gym.Env):
     def __init__(self, domain_name, task_name, from_pixels=True, height=84, width=84, frame_skip=1, *args, **kwargs):
+        self.domain_name = domain_name
+        self.task_name = task_name
         self._env = suite.load(domain_name, task_name)
         self.from_pixels = from_pixels
         self.height = height
@@ -102,6 +104,14 @@ class DMCSuiteEnv(gym.Env):
 
     def reset(self, *, seed=None, options=None):
         super().reset(seed=seed)
+
+        if seed is not None:
+            self._env = suite.load(
+                self.domain_name, 
+                self.task_name,
+                task_kwargs={'random': seed}  # DMC 的随机种子参数
+            )
+
         self._timestep = self._env.reset()
         return self._get_obs(), {}
 
@@ -326,7 +336,8 @@ def make_env(id:str, seed=None):
         if noise:
             env = GaussianNoiseWrapper(env)
 
-    env = NormalizeActionWrapper(env)
+    if isinstance(env.action_space, gym.spaces.Box):
+        env = NormalizeActionWrapper(env)
 
     # set the random seed
     if seed is not None:
